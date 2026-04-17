@@ -14,7 +14,7 @@ NSE_HEADERS = {
     ),
     "Accept": "application/json, text/plain, */*",
     "Accept-Language": "en-US,en;q=0.9",
-    "Accept-Encoding": "gzip, deflate, br",
+    "Accept-Encoding": "gzip, deflate",
     "Referer": "https://www.nseindia.com/get-quotes/equity?symbol=HDFCBANK",
     "Connection": "keep-alive",
 }
