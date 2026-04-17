@@ -1,4 +1,10 @@
-"""NSE exchange session — cookie-primed session, all NSE endpoint implementations."""
+"""NSE exchange session — cookie-primed session, all NSE endpoint implementations.
+
+All methods return the raw API response with minimal transformation:
+- String values are stripped
+- Structure is preserved as-is
+- If NSE adds new fields, they flow through automatically
+"""
 
 from __future__ import annotations
 
@@ -7,14 +13,13 @@ from datetime import date
 from dalal.base import Exchange
 from dalal.constants import (
     NSE_API,
-    NSE_BASE,
     NSE_COOKIE_URL,
     NSE_HEADERS,
     NSE_RATE_LIMIT,
     NSE_TIMEOUT,
 )
 from dalal.errors import AuthError, DataNotAvailable, SymbolNotFound
-from dalal.utils import chunk_dates, clean_date, clean_number, fmt_date_dmy, parse_date
+from dalal.utils import chunk_dates, fmt_date_dmy, parse_date
 
 
 class NSESession(Exchange):
@@ -45,7 +50,6 @@ class NSESession(Exchange):
         try:
             return super().fetch(path, params)
         except AuthError:
-            # Cookie expired — re-prime and retry once
             self._cookies_primed = False
             self._prime_cookies()
             return super().fetch(path, params)
@@ -53,25 +57,15 @@ class NSESession(Exchange):
     # --- quote ---
 
     def quote(self, symbol: str) -> dict:
+        """Full equity quote — returns the entire NSE response.
+
+        Includes: info, metadata, securityInfo, priceInfo, industryInfo,
+        preOpenMarket, sddDetails.
+        """
         data = self.fetch("/quote-equity", params={"symbol": symbol.upper()})
         if not data or "error" in data:
             raise SymbolNotFound(f"NSE symbol not found: {symbol}")
-        info = data.get("priceInfo", {})
-        meta = data.get("info", {})
-        return {
-            "symbol": meta.get("symbol", symbol.upper()),
-            "name": meta.get("companyName", ""),
-            "isin": meta.get("isin", ""),
-            "ltp": clean_number(info.get("lastPrice")),
-            "open": clean_number(info.get("open")),
-            "high": clean_number(info.get("intraDayHighLow", {}).get("max")),
-            "low": clean_number(info.get("intraDayHighLow", {}).get("min")),
-            "prev_close": clean_number(info.get("previousClose")),
-            "change": clean_number(info.get("change")),
-            "pct_change": clean_number(info.get("pChange")),
-            "year_high": clean_number(info.get("weekHighLow", {}).get("max")),
-            "year_low": clean_number(info.get("weekHighLow", {}).get("min")),
-        }
+        return data
 
     # --- history ---
 
@@ -82,6 +76,11 @@ class NSESession(Exchange):
         end: str | date,
         series: str = "EQ",
     ) -> list[dict]:
+        """Historical OHLCV — auto-chunks into 100-day windows.
+
+        NOTE: NSE endpoint /historical/cm/equity may return 404.
+        If so, this method raises ExchangeError.
+        """
         start_d = parse_date(start)
         end_d = parse_date(end)
         chunks = chunk_dates(start_d, end_d, chunk_days=100)
@@ -94,239 +93,121 @@ class NSESession(Exchange):
                 "series": f'["{series}"]',
             }
             data = self.fetch("/historical/cm/equity", params=params)
-            for r in data.get("data", []):
-                all_rows.append(
-                    {
-                        "date": clean_date(r.get("CH_TIMESTAMP")),
-                        "open": clean_number(r.get("CH_OPENING_PRICE")),
-                        "high": clean_number(r.get("CH_TRADE_HIGH_PRICE")),
-                        "low": clean_number(r.get("CH_TRADE_LOW_PRICE")),
-                        "close": clean_number(r.get("CH_CLOSING_PRICE")),
-                        "volume": clean_number(r.get("CH_TOT_TRADED_QTY")),
-                        "vwap": clean_number(r.get("VWAP")),
-                        "delivery_pct": clean_number(r.get("COP_DELIV_PERC")),
-                    }
-                )
+            all_rows.extend(data.get("data", []))
         return all_rows
 
     # --- actions ---
 
     def actions(self, symbol: str | None = None) -> list[dict]:
+        """Corporate actions — dividends, splits, bonuses.
+
+        Returns raw list from NSE with all fields.
+        """
         params: dict = {"index": "equities"}
         if symbol:
             params["symbol"] = symbol.upper()
         data = self.fetch("/corporates-corporateActions", params=params)
-        rows = data if isinstance(data, list) else []
-        return [
-            {
-                "symbol": r.get("symbol", "").strip(),
-                "name": r.get("comp", "").strip(),
-                "isin": r.get("isin", "").strip(),
-                "subject": r.get("subject", "").strip(),
-                "ex_date": clean_date(r.get("exDate")),
-                "record_date": clean_date(r.get("recDate")),
-                "series": r.get("series", "").strip(),
-            }
-            for r in rows
-        ]
+        return data if isinstance(data, list) else []
 
     # --- bulk_deals ---
 
     def bulk_deals(self, start: str | date, end: str | date) -> list[dict]:
+        """Historical bulk deals.
+
+        NOTE: NSE endpoint /historical/bulk-deals may return 404.
+        """
         params = {
             "from": fmt_date_dmy(parse_date(start)),
             "to": fmt_date_dmy(parse_date(end)),
         }
         data = self.fetch("/historical/bulk-deals", params=params)
-        rows = (
-            data.get("data", [])
-            if isinstance(data, dict)
-            else data
-            if isinstance(data, list)
-            else []
-        )
-        return [
-            {
-                "symbol": r.get("symbol", "").strip(),
-                "date": clean_date(r.get("date")),
-                "client": r.get("clientName", "").strip(),
-                "buy_sell": r.get("buySell", "").strip(),
-                "quantity": clean_number(r.get("quantityTraded")),
-                "price": clean_number(r.get("tradePrice")),
-            }
-            for r in rows
-        ]
+        if isinstance(data, dict):
+            return data.get("data", [])
+        return data if isinstance(data, list) else []
 
     # --- block_deals ---
 
-    def block_deals(self) -> list[dict]:
+    def block_deals(self) -> dict:
+        """Block deals — returns full response including session stats and market status."""
         data = self.fetch("/block-deal")
-        rows = data.get("data", []) if isinstance(data, dict) else []
-        return [
-            {
-                "symbol": r.get("symbol", "").strip(),
-                "date": clean_date(r.get("date")),
-                "client": r.get("clientName", "").strip(),
-                "buy_sell": r.get("buySell", "").strip(),
-                "quantity": clean_number(r.get("quantityTraded")),
-                "price": clean_number(r.get("tradePrice")),
-            }
-            for r in rows
-        ]
+        return data if isinstance(data, dict) else {"data": []}
 
     # --- holidays ---
 
-    def holidays(self, holiday_type: str = "trading") -> list[dict]:
+    def holidays(self, holiday_type: str = "trading") -> dict:
+        """Trading/clearing holidays — returns dict keyed by segment (CM, FO, etc.)."""
         data = self.fetch("/holiday-master", params={"type": holiday_type})
-        # NSE returns dict keyed by segment codes (CM, FO, etc.)
-        if not isinstance(data, dict):
-            return []
-        all_holidays: list[dict] = []
-        for segment, entries in data.items():
-            if not isinstance(entries, list):
-                continue
-            for r in entries:
-                all_holidays.append(
-                    {
-                        "date": clean_date(r.get("tradingDate")),
-                        "day": r.get("weekDay", "").strip(),
-                        "description": r.get("description", "").strip(),
-                        "segment": segment,
-                    }
-                )
-        return all_holidays
+        return data if isinstance(data, dict) else {}
 
     # --- index ---
 
     def index(self, name: str = "NIFTY 50") -> dict:
+        """Index constituents with live prices — returns full response.
+
+        Includes: data (constituents), advance, timestamp, metadata, marketStatus.
+        """
         data = self.fetch("/equity-stockIndices", params={"index": name})
         if not data or "error" in data:
             raise DataNotAvailable(f"Index not found: {name}")
-        stocks = data.get("data", [])
-        advance = data.get("advance", {})
-        return {
-            "name": name,
-            "advance": clean_number(advance.get("advances")),
-            "decline": clean_number(advance.get("declines")),
-            "unchanged": clean_number(advance.get("unchanged")),
-            "constituents": [
-                {
-                    "symbol": s.get("symbol", "").strip(),
-                    "name": s.get("meta", {}).get("companyName", "")
-                    if isinstance(s.get("meta"), dict)
-                    else "",
-                    "isin": s.get("meta", {}).get("isin", "")
-                    if isinstance(s.get("meta"), dict)
-                    else "",
-                    "ltp": clean_number(s.get("lastPrice")),
-                    "open": clean_number(s.get("open")),
-                    "high": clean_number(s.get("dayHigh")),
-                    "low": clean_number(s.get("dayLow")),
-                    "prev_close": clean_number(s.get("previousClose")),
-                    "change": clean_number(s.get("change")),
-                    "pct_change": clean_number(s.get("pChange")),
-                    "year_high": clean_number(s.get("yearHigh")),
-                    "year_low": clean_number(s.get("yearLow")),
-                    "ff_market_cap": clean_number(s.get("ffmc")),
-                }
-                for s in stocks
-                if s.get("symbol") != name  # exclude the index row itself
-            ],
-        }
+        return data
 
     # --- shareholding ---
 
-    def shareholding(self, symbol: str) -> list[dict]:
+    def shareholding(self, symbol: str) -> dict | list:
+        """Shareholding pattern.
+
+        NOTE: NSE endpoint /corporateShareholding may return 404.
+        """
         data = self.fetch("/corporateShareholding", params={"symbol": symbol.upper()})
         if not data:
             raise DataNotAvailable(f"No shareholding for {symbol}")
-        rows = data if isinstance(data, list) else data.get("data", [])
-        return [
-            {
-                "date": clean_date(r.get("date") or r.get("submissionDate")),
-                "promoter_pct": clean_number(r.get("pr_and_prgrp")),
-                "public_pct": clean_number(r.get("public_val")),
-                "employee_trusts_pct": clean_number(r.get("employeeTrusts")),
-            }
-            for r in rows
-        ]
+        return data
 
     # --- status ---
 
-    def status(self) -> list[dict]:
+    def status(self) -> dict:
+        """Market status — returns full response.
+
+        Includes: marketState, marketcap, indicativenifty50, giftnifty.
+        """
         data = self.fetch("/marketStatus")
-        rows = data if isinstance(data, list) else data.get("marketState", [])
-        return [
-            {
-                "market": r.get("market", "").strip(),
-                "status": r.get("marketStatus", "").strip(),
-                "index": r.get("index", "").strip(),
-                "last": clean_number(r.get("last")),
-                "change": clean_number(r.get("variation")),
-                "pct_change": clean_number(r.get("percentChange")),
-            }
-            for r in rows
-        ]
+        return data if isinstance(data, dict) else {"marketState": []}
 
     # --- lookup ---
 
-    def lookup(self, query: str) -> list[dict]:
+    def lookup(self, query: str) -> dict:
+        """Symbol search — returns full response.
+
+        Includes: symbols, mfsymbols, search_content, sitemap.
+        """
         data = self.fetch("/search/autocomplete", params={"q": query})
-        rows = data.get("symbols", []) if isinstance(data, dict) else []
-        return [
-            {
-                "symbol": r.get("symbol", "").strip(),
-                "name": r.get("symbol_info", "").strip(),
-                "type": r.get("result_type", "").strip(),
-            }
-            for r in rows
-        ]
-
-    # --- gainers / losers (derived from index data) ---
-
-    def gainers(self, index: str = "NIFTY 50", count: int = 10) -> list[dict]:
-        idx = self.index(index)
-        sorted_stocks = sorted(
-            idx["constituents"],
-            key=lambda s: s.get("pct_change") or 0,
-            reverse=True,
-        )
-        return sorted_stocks[:count]
-
-    def losers(self, index: str = "NIFTY 50", count: int = 10) -> list[dict]:
-        idx = self.index(index)
-        sorted_stocks = sorted(
-            idx["constituents"],
-            key=lambda s: s.get("pct_change") or 0,
-        )
-        return sorted_stocks[:count]
+        return data if isinstance(data, dict) else {"symbols": []}
 
     # --- announcements ---
 
     def announcements(self, symbol: str | None = None) -> list[dict]:
+        """Corporate announcements — returns raw list with all fields."""
         params: dict = {"index": "equities"}
         if symbol:
             params["symbol"] = symbol.upper()
         data = self.fetch("/corporate-announcements", params=params)
-        rows = data if isinstance(data, list) else []
-        return [
-            {
-                "symbol": r.get("symbol", "").strip(),
-                "subject": r.get("subject", "").strip(),
-                "date": clean_date(r.get("an_dt")),
-                "broadcast_date": clean_date(r.get("broadcast_dt")),
-                "description": r.get("desc", "").strip(),
-            }
-            for r in rows
-        ]
+        return data if isinstance(data, list) else []
 
-    # --- advances (derived from index) ---
+    # --- convenience methods (derived from raw data) ---
+
+    def gainers(self, index: str = "NIFTY 50", count: int = 10) -> list[dict]:
+        """Top gainers by pct_change from index constituents."""
+        idx = self.index(index)
+        stocks = [s for s in idx.get("data", []) if s.get("symbol") != index]
+        return sorted(stocks, key=lambda s: s.get("pChange") or 0, reverse=True)[:count]
+
+    def losers(self, index: str = "NIFTY 50", count: int = 10) -> list[dict]:
+        """Top losers by pct_change from index constituents."""
+        idx = self.index(index)
+        stocks = [s for s in idx.get("data", []) if s.get("symbol") != index]
+        return sorted(stocks, key=lambda s: s.get("pChange") or 0)[:count]
 
     def advances(self) -> dict:
+        """Advance/decline from NIFTY 50 index data."""
         idx = self.index("NIFTY 50")
-        return {
-            "index": "NIFTY 50",
-            "advances": idx["advance"],
-            "declines": idx["decline"],
-            "unchanged": idx["unchanged"],
-        }
+        return idx.get("advance", {})

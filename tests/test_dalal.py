@@ -1,4 +1,4 @@
-"""Dalal public API tests."""
+"""Dalal public API tests — raw passthrough."""
 
 import pytest
 import responses
@@ -15,7 +15,7 @@ class TestDalalRouting:
 
     def test_context_manager(self):
         with Dalal() as d:
-            assert d._nse is None  # lazy — not initialized yet
+            assert d._nse is None
             assert d._bse is None
 
     @responses.activate
@@ -25,46 +25,28 @@ class TestDalalRouting:
             responses.GET,
             "https://www.nseindia.com/api/quote-equity",
             json={
-                "info": {
-                    "symbol": "RELIANCE",
-                    "companyName": "Reliance",
-                    "isin": "INE002A01018",
-                },
-                "priceInfo": {
-                    "lastPrice": 1365.0,
-                    "open": 1360.0,
-                    "previousClose": 1350.0,
-                    "intraDayHighLow": {},
-                    "weekHighLow": {},
-                },
+                "info": {"symbol": "RELIANCE"},
+                "priceInfo": {"lastPrice": 1365.0},
             },
         )
         with Dalal() as d:
             result = d.quote("RELIANCE")
-            assert result["ltp"] == 1365.0
-            assert d._nse is not None  # lazy init happened
-            assert d._bse is None  # BSE not touched
+            assert result["priceInfo"]["lastPrice"] == 1365.0
+            assert d._nse is not None
+            assert d._bse is None
 
     @responses.activate
     def test_quote_bse_explicit(self):
         responses.add(
             responses.GET,
             "https://api.bseindia.com/BseIndiaAPI/api/getScripHeaderData/w",
-            json={
-                "Header": {
-                    "LTP": "1365.10",
-                    "Open": "1360",
-                    "High": "1370",
-                    "Low": "1340",
-                    "PrevClose": "1350",
-                }
-            },
+            json={"Header": {"LTP": "1365.10"}},
         )
         with Dalal() as d:
             result = d.quote("500325", exchange="BSE")
-            assert result["ltp"] == 1365.10
+            assert result["Header"]["LTP"] == "1365.10"
             assert d._bse is not None
-            assert d._nse is None  # NSE not touched
+            assert d._nse is None
 
     @responses.activate
     def test_fundamentals_uses_bse(self):
@@ -74,12 +56,10 @@ class TestDalalRouting:
             json={
                 "col1": "(in Cr.)",
                 "col2": "Dec-25",
-                "resultinCr": [
-                    {"title": "Revenue", "v1": "100"},
-                    {"title": "EPS", "v1": "5.0"},
-                ],
+                "resultinCr": [{"title": "Revenue", "v1": "100"}],
             },
         )
         with Dalal() as d:
             result = d.fundamentals("500325")
-            assert result["periods"][0]["revenue"] == 100.0
+            assert result["col1"] == "(in Cr.)"
+            assert result["resultinCr"][0]["v1"] == "100"

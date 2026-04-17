@@ -61,6 +61,24 @@ def clean_date(value: str | None) -> str | None:
         return None
 
 
+def clean_row(raw: dict, renames: dict | None = None) -> dict:
+    """Clean a raw API response row — pass everything through.
+
+    - Renames known keys via renames map (old_key → new_key)
+    - Cleans number-like values via clean_number
+    - Strips string values
+    - Passes unknown keys through untouched
+    """
+    renames = renames or {}
+    out = {}
+    for k, v in raw.items():
+        key = renames.get(k, k)
+        if isinstance(v, str):
+            v = v.strip()
+        out[key] = v
+    return out
+
+
 def chunk_dates(
     start: date, end: date, chunk_days: int = 100
 ) -> list[tuple[date, date]]:

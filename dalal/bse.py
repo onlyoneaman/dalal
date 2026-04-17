@@ -1,11 +1,18 @@
-"""BSE exchange session — all BSE API endpoint implementations."""
+"""BSE exchange session — all BSE API endpoint implementations.
+
+All methods return the raw API response with minimal transformation:
+- JSON strings are double-parsed where BSE wraps JSON in quotes
+- Structure is preserved as-is
+- If BSE adds new fields, they flow through automatically
+"""
 
 from __future__ import annotations
+
+import json as _json
 
 from dalal.base import Exchange
 from dalal.constants import BSE_API, BSE_HEADERS, BSE_RATE_LIMIT, BSE_TIMEOUT
 from dalal.errors import DataNotAvailable, SymbolNotFound
-from dalal.utils import clean_date, clean_number
 
 
 class BSESession(Exchange):
@@ -19,24 +26,21 @@ class BSESession(Exchange):
     # --- quote ---
 
     def quote(self, scripcode: str) -> dict:
+        """Full scrip quote — returns the entire BSE response.
+
+        Includes: Header, CurrRate, Cmpname, CompResp.
+        """
         data = self.fetch(
             "/getScripHeaderData/w", params={"Ession": "E", "scripcode": scripcode}
         )
-        header = data.get("Header", {})
-        if not header:
+        if not data or not data.get("Header"):
             raise SymbolNotFound(f"BSE scripcode not found: {scripcode}")
-        return {
-            "prev_close": clean_number(header.get("PrevClose")),
-            "open": clean_number(header.get("Open")),
-            "high": clean_number(header.get("High")),
-            "low": clean_number(header.get("Low")),
-            "ltp": clean_number(header.get("LTP")),
-            "scripcode": scripcode,
-        }
+        return data
 
     # --- actions ---
 
     def actions(self, scripcode: str | None = None) -> list[dict]:
+        """Corporate actions — returns raw Table list with all fields."""
         params = {
             "Type": "N",
             "Atea": "E",
@@ -52,30 +56,20 @@ class BSESession(Exchange):
         if scripcode:
             params["scripcode"] = scripcode
         data = self.fetch("/DefaultData/w", params=params)
-        table = data.get("Table", [])
-        return [
-            {
-                "scripcode": r.get("scrip_code", "").strip(),
-                "name": r.get("short_name", "").strip(),
-                "long_name": r.get("long_name", "").strip(),
-                "ex_date": clean_date(r.get("exdate") or r.get("Ex_date")),
-                "purpose": r.get("Purpose", "").strip(),
-                "record_date": clean_date(r.get("RD_Date")),
-                "payment_date": clean_date(r.get("payment_date")),
-            }
-            for r in table
-        ]
+        return data.get("Table", []) if isinstance(data, dict) else []
 
     # --- fundamentals ---
 
     def fundamentals(self, scripcode: str) -> dict:
-        import json as _json
+        """Results snapshot — returns full response with all result sets.
 
+        BSE sometimes wraps JSON in quotes, so double-parse if needed.
+        Includes: col1-col4, resultinCr, resultinM, resultinS.
+        """
         data = self.fetch(
             "/TabResults_PAR/w",
             params={"scripcode": scripcode, "tabtype": "RESULTS"},
         )
-        # BSE returns a JSON string that needs double-parsing
         if isinstance(data, str):
             try:
                 data = _json.loads(data)
@@ -83,78 +77,42 @@ class BSESession(Exchange):
                 pass
         if not data or not isinstance(data, dict):
             raise DataNotAvailable(f"No fundamentals for BSE {scripcode}")
-
-        currency_unit = data.get("col1", "").strip("() ")
-        periods = [data.get(f"col{i}", "") for i in range(2, 5) if data.get(f"col{i}")]
-
-        results_raw = data.get("resultinCr", [])
-        results = []
-        for item in results_raw:
-            title = item.get("title", "")
-            values = [clean_number(item.get(f"v{i}")) for i in range(1, 4)]
-            for i, period in enumerate(periods):
-                if i >= len(values):
-                    break
-                # Build per-period dict lazily
-                if i >= len(results):
-                    results.append({"period": period})
-                results[i][title.lower().replace(" ", "_").replace("%", "pct")] = (
-                    values[i]
-                )
-
-        return {
-            "scripcode": scripcode,
-            "currency_unit": currency_unit,
-            "periods": results,
-        }
+        return data
 
     # --- meta ---
 
     def meta(self, scripcode: str) -> dict:
+        """Equity meta — returns full response with all fields.
+
+        Includes: EPS, PE, ConEPS, ConPE, PB, ROE, OPM, NPM, CEPS,
+        ConCEPS, ConOPM, ConNPM, ConPB, ConROE, FaceVal, ISIN,
+        Industry, Sector, IndustryNew, Group, COName, etc.
+        """
         data = self.fetch("/ComHeadernew/w", params={"scripcode": scripcode})
         if not data:
             raise DataNotAvailable(f"No meta for BSE {scripcode}")
-        return {
-            "scripcode": scripcode,
-            "eps": clean_number(data.get("EPS")),
-            "pe": clean_number(data.get("PE")),
-            "con_eps": clean_number(data.get("ConEPS")),
-            "con_pe": clean_number(data.get("ConPE")),
-            "pb": clean_number(data.get("PB")),
-            "roe": clean_number(data.get("ROE")),
-            "opm": clean_number(data.get("OPM")),
-            "npm": clean_number(data.get("NPM")),
-            "isin": data.get("ISIN"),
-            "industry": data.get("Industry"),
-            "group": data.get("Scrip_group"),
-        }
+        return data if isinstance(data, dict) else {}
 
     # --- result_calendar ---
 
-    def result_calendar(self, scripcode: str | None = None) -> list[dict]:
+    def result_calendar(self, scripcode: str | None = None) -> dict:
+        """Upcoming earnings dates — returns full response."""
         params: dict = {}
         if scripcode:
             params["scripcode"] = scripcode
         data = self.fetch("/Corpforthresults/w", params=params)
-        table = data.get("Table", [])
-        return [
-            {
-                "scripcode": r.get("scrip_Code", "").strip(),
-                "name": r.get("short_name", "").strip(),
-                "long_name": r.get("Long_Name", "").strip(),
-                "meeting_date": clean_date(r.get("meeting_date")),
-            }
-            for r in table
-        ]
+        return data if isinstance(data, dict) else {}
 
     # --- gainers ---
 
     def gainers(self, by: str = "group", name: str = "A") -> list[dict]:
+        """Top gainers — returns raw Table list with all fields."""
         return self._movers("G", by, name)
 
     # --- losers ---
 
     def losers(self, by: str = "group", name: str = "A") -> list[dict]:
+        """Top losers — returns raw Table list with all fields."""
         return self._movers("L", by, name)
 
     def _movers(self, gl_type: str, by: str, name: str) -> list[dict]:
@@ -165,17 +123,7 @@ class BSESession(Exchange):
             "Ession1": "",
         }
         data = self.fetch("/MktRGainerLoserData/w", params=params)
-        table = data.get("Table", [])
-        return [
-            {
-                "scripcode": r.get("scrip_cd", "").strip(),
-                "name": r.get("scrip_nm", "").strip(),
-                "ltp": clean_number(r.get("ltradert")),
-                "change": clean_number(r.get("change")),
-                "pct_change": clean_number(r.get("pctchange")),
-            }
-            for r in table
-        ]
+        return data.get("Table", []) if isinstance(data, dict) else []
 
     # --- announcements ---
 
@@ -183,55 +131,26 @@ class BSESession(Exchange):
         self,
         scripcode: str | None = None,
         page: int = 1,
-    ) -> list[dict]:
+    ) -> dict:
+        """Corporate announcements — returns full response."""
         params: dict = {"pageNo": str(page), "strSearch": ""}
         if scripcode:
             params["scripcode"] = scripcode
         data = self.fetch("/AnnSubCategoryGetData/w", params=params)
-        table = data.get("Table", [])
-        return [
-            {
-                "scripcode": r.get("SCRIP_CD", "").strip(),
-                "name": r.get("SLONGNAME", "").strip(),
-                "headline": r.get("HEADLINE", "").strip(),
-                "date": clean_date(r.get("DT_TM")),
-                "attachment_url": r.get("ATTACHMENTNAME", ""),
-            }
-            for r in table
-        ]
+        return data if isinstance(data, dict) else {}
 
     # --- status (advance/decline) ---
 
-    def status(self) -> list[dict]:
-        data = self.fetch("/advanceDecline/w")
-        table = data if isinstance(data, list) else data.get("Table", [])
-        return [
-            {
-                "index": r.get("indx_nm", "").strip(),
-                "advances": clean_number(r.get("adv")),
-                "declines": clean_number(r.get("dec")),
-                "unchanged": clean_number(r.get("unc")),
-            }
-            for r in table
-        ]
+    def status(self) -> list | dict:
+        """Advance/decline for all indices — returns raw response."""
+        return self.fetch("/advanceDecline/w")
 
     # --- lookup ---
 
-    def lookup(self, query: str) -> list[dict]:
+    def lookup(self, query: str) -> list | dict:
+        """Symbol search — returns raw response."""
         data = self.fetch(
             "/PeerSmartSearch/w",
             params={"Type": "S", "text": query},
         )
-        # BSE returns HTML fragment — parse it
-        if isinstance(data, str) or not data:
-            return []
-        # If API returns a list directly
-        if isinstance(data, list):
-            return [
-                {
-                    "scripcode": str(r.get("scrip_cd", "")).strip(),
-                    "name": r.get("scrip_nm", "").strip(),
-                }
-                for r in data
-            ]
-        return []
+        return data if data else []
