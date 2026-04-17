@@ -115,7 +115,7 @@ class NSESession(Exchange):
         params: dict = {"index": "equities"}
         if symbol:
             params["symbol"] = symbol.upper()
-        data = self.fetch("/corporateActions", params=params)
+        data = self.fetch("/corporates-corporateActions", params=params)
         rows = data if isinstance(data, list) else []
         return [
             {

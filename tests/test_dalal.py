@@ -72,9 +72,12 @@ class TestDalalRouting:
             responses.GET,
             "https://api.bseindia.com/BseIndiaAPI/api/TabResults_PAR/w",
             json={
-                "currency_unit": "Cr",
-                "periods": ["Dec-25"],
-                "results_in_crores": {"Dec-25": {"Revenue": "100", "EPS": "5.0"}},
+                "col1": "(in Cr.)",
+                "col2": "Dec-25",
+                "resultinCr": [
+                    {"title": "Revenue", "v1": "100"},
+                    {"title": "EPS", "v1": "5.0"},
+                ],
             },
         )
         with Dalal() as d:

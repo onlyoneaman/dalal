@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Unified Python API for Indian stock exchanges (NSE + BSE)"
 requires-python = ">=3.11"
 license = "MIT"
-authors = [{ name = "Aman Kumar", email = "aman@amankumar.ai" }]
+authors = [{ name = "Aman", email = "2000.aman.sinha@gmail.com" }]
 dependencies = [
     "requests>=2.31",
 ]

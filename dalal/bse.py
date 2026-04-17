@@ -69,29 +69,42 @@ class BSESession(Exchange):
     # --- fundamentals ---
 
     def fundamentals(self, scripcode: str) -> dict:
-        data = self.fetch("/TabResults_PAR/w", params={"scripcode": scripcode})
-        if not data:
+        import json as _json
+
+        data = self.fetch(
+            "/TabResults_PAR/w",
+            params={"scripcode": scripcode, "tabtype": "RESULTS"},
+        )
+        # BSE returns a JSON string that needs double-parsing
+        if isinstance(data, str):
+            try:
+                data = _json.loads(data)
+            except (ValueError, TypeError):
+                pass
+        if not data or not isinstance(data, dict):
             raise DataNotAvailable(f"No fundamentals for BSE {scripcode}")
-        periods = data.get("periods", [])
-        crores = data.get("results_in_crores", {})
+
+        currency_unit = data.get("col1", "").strip("() ")
+        periods = [data.get(f"col{i}", "") for i in range(2, 5) if data.get(f"col{i}")]
+
+        results_raw = data.get("resultinCr", [])
         results = []
-        for p in periods:
-            row = crores.get(p, {})
-            results.append(
-                {
-                    "period": p,
-                    "revenue": clean_number(row.get("Revenue")),
-                    "net_profit": clean_number(row.get("Net Profit")),
-                    "eps": clean_number(row.get("EPS")),
-                    "cash_eps": clean_number(row.get("Cash EPS")),
-                    "opm_pct": clean_number(row.get("OPM %")),
-                    "npm_pct": clean_number(row.get("NPM %")),
-                    "pe": clean_number(row.get("P/E")),
-                }
-            )
+        for item in results_raw:
+            title = item.get("title", "")
+            values = [clean_number(item.get(f"v{i}")) for i in range(1, 4)]
+            for i, period in enumerate(periods):
+                if i >= len(values):
+                    break
+                # Build per-period dict lazily
+                if i >= len(results):
+                    results.append({"period": period})
+                results[i][title.lower().replace(" ", "_").replace("%", "pct")] = (
+                    values[i]
+                )
+
         return {
             "scripcode": scripcode,
-            "currency_unit": data.get("currency_unit", ""),
+            "currency_unit": currency_unit,
             "periods": results,
         }
 
