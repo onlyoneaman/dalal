@@ -1,5 +1,6 @@
 """dalal — Unified Python API for Indian stock exchanges (NSE + BSE)."""
 
+from dalal.dalal import Dalal
 from dalal.errors import (
     AuthError,
     DalalError,
@@ -13,6 +14,7 @@ from dalal.errors import (
 )
 
 __all__ = [
+    "Dalal",
     "DalalError",
     "ExchangeError",
     "AuthError",
