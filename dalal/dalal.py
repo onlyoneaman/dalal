@@ -129,8 +129,10 @@ class Dalal:
 
     # --- NSE-only methods ---
 
-    def bulk_deals(self, start: str | date, end: str | date):
-        return self._get_nse().bulk_deals(start, end)
+    def bulk_deals(
+        self, start: str | date, end: str | date, option_type: str = "bulk_deals"
+    ):
+        return self._get_nse().bulk_deals(start, end, option_type=option_type)
 
     def block_deals(self):
         return self._get_nse().block_deals()

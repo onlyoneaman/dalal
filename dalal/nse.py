@@ -78,8 +78,9 @@ class NSESession(Exchange):
     ) -> list[dict]:
         """Historical OHLCV — auto-chunks into 100-day windows.
 
-        NOTE: NSE endpoint /historical/cm/equity may return 404.
-        If so, this method raises ExchangeError.
+        Uses NSE's NextApi/GetQuoteApi endpoint. Returns raw rows with fields:
+        chSymbol, chOpeningPrice, chTradeHighPrice, chTradeLowPrice,
+        chClosingPrice, vwap, chTotTradedQty, chTotTradedVal, mtimestamp, etc.
         """
         start_d = parse_date(start)
         end_d = parse_date(end)
@@ -87,13 +88,15 @@ class NSESession(Exchange):
         all_rows: list[dict] = []
         for c_start, c_end in chunks:
             params = {
+                "functionName": "getHistoricalTradeData",
                 "symbol": symbol.upper(),
-                "from": fmt_date_dmy(c_start),
-                "to": fmt_date_dmy(c_end),
-                "series": f'["{series}"]',
+                "series": series.upper(),
+                "fromDate": fmt_date_dmy(c_start),
+                "toDate": fmt_date_dmy(c_end),
             }
-            data = self.fetch("/historical/cm/equity", params=params)
-            all_rows.extend(data.get("data", []))
+            data = self.fetch("/NextApi/apiClient/GetQuoteApi", params=params)
+            if isinstance(data, list):
+                all_rows.extend(data)
         return all_rows
 
     # --- actions ---
@@ -111,16 +114,23 @@ class NSESession(Exchange):
 
     # --- bulk_deals ---
 
-    def bulk_deals(self, start: str | date, end: str | date) -> list[dict]:
-        """Historical bulk deals.
+    def bulk_deals(
+        self,
+        start: str | date,
+        end: str | date,
+        option_type: str = "bulk_deals",
+    ) -> list[dict]:
+        """Historical bulk/block/short-selling deals.
 
-        NOTE: NSE endpoint /historical/bulk-deals may return 404.
+        option_type: "bulk_deals", "block_deals", or "short_selling".
+        Max 1-year range per call.
         """
         params = {
+            "optionType": option_type,
             "from": fmt_date_dmy(parse_date(start)),
             "to": fmt_date_dmy(parse_date(end)),
         }
-        data = self.fetch("/historical/bulk-deals", params=params)
+        data = self.fetch("/historicalOR/bulk-block-short-deals", params=params)
         if isinstance(data, dict):
             return data.get("data", [])
         return data if isinstance(data, list) else []
@@ -153,15 +163,18 @@ class NSESession(Exchange):
 
     # --- shareholding ---
 
-    def shareholding(self, symbol: str) -> dict | list:
-        """Shareholding pattern.
+    def shareholding(self, symbol: str, index: str = "equities") -> list:
+        """Shareholding pattern — quarterly promoter/public/FII holdings.
 
-        NOTE: NSE endpoint /corporateShareholding may return 404.
+        Returns raw list of quarterly records, latest first.
         """
-        data = self.fetch("/corporateShareholding", params={"symbol": symbol.upper()})
+        data = self.fetch(
+            "/corporate-share-holdings-master",
+            params={"index": index, "symbol": symbol.upper()},
+        )
         if not data:
             raise DataNotAvailable(f"No shareholding for {symbol}")
-        return data
+        return data if isinstance(data, list) else []
 
     # --- status ---
 

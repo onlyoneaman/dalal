@@ -56,22 +56,21 @@ class TestNSEHistory:
         responses.add(responses.GET, "https://www.nseindia.com/option-chain", body="ok")
         responses.add(
             responses.GET,
-            "https://www.nseindia.com/api/historical/cm/equity",
-            json={
-                "data": [
-                    {
-                        "CH_CLOSING_PRICE": 1365,
-                        "CH_TOT_TRADED_QTY": 5000000,
-                        "VWAP": 1358.5,
-                    }
-                ]
-            },
+            "https://www.nseindia.com/api/NextApi/apiClient/GetQuoteApi",
+            json=[
+                {
+                    "chClosingPrice": 1365,
+                    "chTotTradedQty": 5000000,
+                    "vwap": 1358.5,
+                    "mtimestamp": "15-Apr-2025",
+                }
+            ],
         )
         nse = NSESession()
         result = nse.history("RELIANCE", "2025-04-01", "2025-04-15")
         assert len(result) == 1
-        assert result[0]["CH_CLOSING_PRICE"] == 1365
-        assert result[0]["VWAP"] == 1358.5
+        assert result[0]["chClosingPrice"] == 1365
+        assert result[0]["vwap"] == 1358.5
         nse.close()
 
 
