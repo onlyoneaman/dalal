@@ -1,0 +1,46 @@
+# dalal - llms.txt
+
+License: MIT (see LICENSE).
+
+Project: dalal
+Summary: Unified Python API for Indian stock exchanges (NSE + BSE) with no API keys.
+Primary language: Python 3.11+
+
+Install:
+- pip install dalal
+
+Important docs:
+- README.md
+- llms-full.txt
+- AGENTS.md
+- CONTRIBUTING.md
+- SECURITY.md
+- DISCLAIMER.md
+
+Core public API:
+- dalal.quote(symbol, exchange="NSE")
+- dalal.history(symbol, start, end, exchange="NSE", series="EQ")
+- dalal.actions(symbol=None, exchange="NSE")
+- dalal.fundamentals(scripcode)
+- dalal.meta(scripcode)
+- dalal.index(name="NIFTY 50")
+- dalal.holidays(holiday_type="trading")
+- dalal.bulk_deals(start, end)
+- dalal.block_deals()
+- dalal.shareholding(symbol)
+- dalal.gainers(index=None, exchange="NSE")
+- dalal.losers(index=None, exchange="NSE")
+- dalal.announcements(symbol=None, exchange="NSE")
+- dalal.status(exchange="NSE")
+- dalal.lookup(query, exchange="NSE")
+- dalal.result_calendar(scripcode=None)
+- dalal.advances()
+
+Test command:
+- pytest -q
+
+Notes for agents:
+- Keep API compatibility for existing method names/return fields.
+- Prefer deterministic tests using `responses` over live HTTP tests.
+- Do not provide investment advice; this package is data access only.
+- Exchange endpoints are unofficial/public web APIs and may change without notice.

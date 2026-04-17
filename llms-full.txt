@@ -1,0 +1,86 @@
+# dalal - llms-full.txt
+
+License: MIT (see LICENSE).
+
+## 1) What this project is
+`dalal` is a lightweight Python package that exposes a unified interface over NSE and BSE public web endpoints used by official exchange websites.
+
+Design goals:
+- zero API key setup
+- minimal dependencies (`requests` only at runtime)
+- stable, Pythonic return payloads
+- built-in rate limiting and resilient session behavior
+
+## 2) Repository map
+- `dalal/__init__.py`: package exports and module-level shared instance
+- `dalal/dalal.py`: `Dalal` unified router + lazy session creation
+- `dalal/nse.py`: NSE session, endpoint calls, normalization
+- `dalal/bse.py`: BSE session, endpoint calls, normalization
+- `dalal/base.py`: common HTTP + rate-limit primitives
+- `dalal/utils.py`: coercion/date/normalization helpers
+- `dalal/errors.py`: package exception hierarchy
+- `dalal/constants.py`: endpoint constants and defaults
+- `tests/`: unit tests with mocked HTTP responses
+
+## 3) Public API contract
+Module-level functions proxy to a shared `Dalal` instance. `Dalal` also supports context-manager usage.
+
+Dual-exchange methods (NSE default):
+- `quote(symbol, exchange="NSE")`
+- `actions(symbol=None, exchange="NSE")`
+- `gainers(index=None, exchange="NSE")`
+- `losers(index=None, exchange="NSE")`
+- `announcements(symbol=None, exchange="NSE")`
+- `status(exchange="NSE")`
+- `lookup(query, exchange="NSE")`
+
+NSE-only methods:
+- `history(symbol, start, end, exchange="NSE", series="EQ")`
+- `bulk_deals(start, end)`
+- `block_deals()`
+- `holidays(holiday_type="trading")`
+- `index(name="NIFTY 50")`
+- `shareholding(symbol)`
+- `advances()`
+
+BSE-only methods:
+- `fundamentals(scripcode)`
+- `meta(scripcode)`
+- `result_calendar(scripcode=None)`
+
+## 4) Exception model
+All custom exceptions inherit `DalalError`:
+- `ExchangeError` -> `AuthError`, `SymbolNotFound`, `DataNotAvailable`
+- `NetworkError` -> `RateLimited`, `ExchangeDown`
+- `ValidationError`
+
+## 5) Agent/contributor guardrails
+- Preserve exported names in `dalal/__init__.py` unless intentionally making a major release.
+- Prefer additive changes in response payloads; avoid deleting/renaming keys casually.
+- Keep lazy initialization semantics in `Dalal`.
+- Keep rate limiting on by default.
+- Add/adjust tests for each behavioral change.
+
+## 6) Testing and quality
+Install dev deps:
+- `pip install -e .[dev]`
+
+Run tests:
+- `pytest -q`
+
+Test style:
+- Mock all HTTP using `responses`.
+- Assert normalized payload shape and key numeric coercions.
+- Prefer focused unit tests over broad integration tests.
+
+## 7) Packaging and release
+- Build backend: Hatchling
+- Runtime deps: `requests>=2.31`
+- Supported Python: `>=3.11`
+- Type marker included: `dalal/py.typed`
+- Changelog source: `CHANGELOG.md`
+
+## 8) Trust and legal posture
+- This package does not provide investment advice.
+- Data is sourced from public, unofficial exchange-facing endpoints that can change.
+- Consumers should build retry/backoff logic and monitor data quality in production.

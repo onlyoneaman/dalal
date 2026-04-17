@@ -172,6 +172,20 @@ d = Dalal(nse_rate=2, bse_rate=5)
 - **BSE**: Simple session with browser-like headers
 - **Sessions are lazy**: NSE session only created on first NSE call, same for BSE
 
+## Typing
+
+`dalal` includes a `py.typed` marker for typed Python consumers.
+
+## Project Docs
+
+- [AGENTS.md](AGENTS.md) — AI/human contributor playbook
+- [CONTRIBUTING.md](CONTRIBUTING.md) — contribution workflow
+- [SECURITY.md](SECURITY.md) — security reporting policy
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — community rules
+- [CHANGELOG.md](CHANGELOG.md) — release history
+- [DISCLAIMER.md](DISCLAIMER.md) — legal and data-source disclaimer
+- [llms.txt](llms.txt) and [llms-full.txt](llms-full.txt) — LLM-oriented project map
+
 ## Requirements
 
 - Python 3.11+
