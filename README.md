@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Tests](https://github.com/onlyoneaman/dalal/actions/workflows/tests.yml/badge.svg)](https://github.com/onlyoneaman/dalal/actions)
 
-Unified Python API for Indian stock exchanges (NSE + BSE). One class, both exchanges.
+Unified Python API for Indian stock exchanges (NSE + BSE).
 
 No API keys. No third-party exchange wrappers. Just `requests` under the hood.
 
@@ -18,19 +18,16 @@ pip install dalal
 ## Quick Start
 
 ```python
-from dalal import Dalal
+import dalal
 
-with Dalal() as d:
-    # NSE (default)
-    d.quote("RELIANCE")
-    d.history("RELIANCE", "2025-01-01", "2025-12-31")
-    d.actions("RELIANCE")
-
-    # BSE
-    d.quote("500325", exchange="BSE")
-    d.fundamentals("500325")
-    d.meta("500325")
+dalal.quote("RELIANCE")                          # NSE (default)
+dalal.quote("500325", exchange="BSE")            # BSE
+dalal.fundamentals("500325")                     # 3-period financials
+dalal.actions("RELIANCE")                        # dividends, splits, bonuses
+dalal.history("RELIANCE", "2025-01-01", "2025-12-31")
 ```
+
+Need explicit session control? Use the `Dalal` class directly with a context manager.
 
 ## Features
 
@@ -59,82 +56,87 @@ with Dalal() as d:
 ### Quotes
 
 ```python
-with Dalal() as d:
-    nse = d.quote("RELIANCE")
-    # {'symbol': 'RELIANCE', 'ltp': 1365.1, 'open': 1360.0, 'high': 1370.0,
-    #  'low': 1340.0, 'prev_close': 1350.0, 'year_high': 1600.0, ...}
+import dalal
 
-    bse = d.quote("500325", exchange="BSE")
-    # {'scripcode': '500325', 'ltp': 1365.1, 'open': 1340.0, ...}
+nse = dalal.quote("RELIANCE")
+# {'symbol': 'RELIANCE', 'ltp': 1365.1, 'open': 1360.0, 'high': 1370.0,
+#  'low': 1340.0, 'prev_close': 1350.0, 'year_high': 1600.0, ...}
+
+bse = dalal.quote("500325", exchange="BSE")
+# {'scripcode': '500325', 'ltp': 1365.1, 'open': 1340.0, ...}
 ```
 
 ### Historical Data
 
 ```python
-with Dalal() as d:
-    data = d.history("RELIANCE", "2025-01-01", "2025-06-30")
-    # [{'date': '2025-01-02', 'open': 1300.0, 'high': 1320.0,
-    #   'low': 1290.0, 'close': 1310.0, 'volume': 5000000.0}, ...]
+import dalal
 
-    # Works with pandas
-    import pandas as pd
-    df = pd.DataFrame(data)
+data = dalal.history("RELIANCE", "2025-01-01", "2025-06-30")
+# [{'date': '2025-01-02', 'open': 1300.0, 'high': 1320.0,
+#   'low': 1290.0, 'close': 1310.0, 'volume': 5000000.0}, ...]
+
+# Works with pandas
+import pandas as pd
+df = pd.DataFrame(data)
 ```
 
 ### Fundamentals (BSE)
 
 ```python
-with Dalal() as d:
-    f = d.fundamentals("500325")
-    # {'scripcode': '500325', 'currency_unit': 'in Cr.',
-    #  'periods': [
-    #    {'period': 'Dec-25', 'revenue': 125741.0, 'net_profit': 9396.0,
-    #     'eps': 6.94, 'opm_pct': 14.56, 'npm_pct': 7.47},
-    #    {'period': 'Sep-25', ...},
-    #    {'period': 'FY24-25', ...}
-    #  ]}
+import dalal
 
-    m = d.meta("500325")
-    # {'eps': 35.21, 'pe': 38.77, 'roe': 9.09, 'pb': 3.52, ...}
+f = dalal.fundamentals("500325")
+# {'scripcode': '500325', 'currency_unit': 'in Cr.',
+#  'periods': [
+#    {'period': 'Dec-25', 'revenue': 125741.0, 'net_profit': 9396.0,
+#     'eps': 6.94, 'opm_pct': 14.56, 'npm_pct': 7.47},
+#    {'period': 'Sep-25', ...},
+#    {'period': 'FY24-25', ...}
+#  ]}
+
+m = dalal.meta("500325")
+# {'eps': 35.21, 'pe': 38.77, 'roe': 9.09, 'pb': 3.52, ...}
 ```
 
 ### Corporate Actions
 
 ```python
-with Dalal() as d:
-    actions = d.actions("RELIANCE")
-    # [{'symbol': 'RELIANCE', 'subject': 'Dividend - Rs 5.5 Per Share',
-    #   'ex_date': '2025-08-14', ...},
-    #  {'symbol': 'RELIANCE', 'subject': 'Bonus 1:1',
-    #   'ex_date': '2024-10-28', ...}]
+import dalal
+
+actions = dalal.actions("RELIANCE")
+# [{'symbol': 'RELIANCE', 'subject': 'Dividend - Rs 5.5 Per Share',
+#   'ex_date': '2025-08-14', ...},
+#  {'symbol': 'RELIANCE', 'subject': 'Bonus 1:1',
+#   'ex_date': '2024-10-28', ...}]
 ```
 
 ### Index Constituents
 
 ```python
-with Dalal() as d:
-    nifty = d.index("NIFTY 50")
-    # {'name': 'NIFTY 50', 'advance': 30, 'decline': 20,
-    #  'constituents': [
-    #    {'symbol': 'RELIANCE', 'ltp': 1365.0, 'pct_change': 1.12, ...},
-    #    ...
-    #  ]}
+import dalal
+
+nifty = dalal.index("NIFTY 50")
+# {'name': 'NIFTY 50', 'advance': 30, 'decline': 20,
+#  'constituents': [
+#    {'symbol': 'RELIANCE', 'ltp': 1365.0, 'pct_change': 1.12, ...},
+#    ...
+#  ]}
 ```
 
 ## Error Handling
 
 ```python
-from dalal import Dalal, SymbolNotFound, RateLimited, NetworkError
+import dalal
+from dalal import SymbolNotFound, RateLimited, NetworkError
 
-with Dalal() as d:
-    try:
-        d.quote("INVALID")
-    except SymbolNotFound:
-        print("Symbol not found")
-    except RateLimited:
-        print("Too many requests — slow down")
-    except NetworkError:
-        print("Connection issue")
+try:
+    dalal.quote("INVALID")
+except SymbolNotFound:
+    print("Symbol not found")
+except RateLimited:
+    print("Too many requests — slow down")
+except NetworkError:
+    print("Connection issue")
 ```
 
 All exceptions inherit from `DalalError`:
